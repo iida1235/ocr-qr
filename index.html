@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>文書文字起こし</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:680px;margin:0 auto;padding:24px;background:#f6f6f6}
+.card{background:white;border-radius:16px;padding:22px;box-shadow:0 2px 12px #0001}
+h1{font-size:24px} input,button{font-size:18px;padding:14px;margin-top:10px;width:100%;box-sizing:border-box}
+button{cursor:pointer;border:0;border-radius:10px;background:#222;color:white}
+#preview{max-width:100%;margin-top:15px;border-radius:10px}
+#result{white-space:pre-wrap;background:#fafafa;padding:15px;border-radius:10px;margin-top:15px;min-height:100px}
+.small{font-size:13px;color:#666}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>📄 文書文字起こし</h1>
+<p>スマホで文書を撮影し、文字起こしします。</p>
+<input id="photo" type="file" accept="image/*" capture="environment">
+<img id="preview" hidden>
+<button id="run">文字起こしする</button>
+<div id="status" class="small"></div>
+<div id="result"></div>
+<button id="copy">結果をコピー</button>
+</div>
+<script>
+const photo=document.getElementById('photo');
+const preview=document.getElementById('preview');
+const result=document.getElementById('result');
+const status=document.getElementById('status');
+
+photo.onchange=()=>{
+ const f=photo.files[0];
+ if(!f)return;
+ preview.src=URL.createObjectURL(f); preview.hidden=false;
+ result.textContent='';
+};
+
+document.getElementById('run').onclick=async()=>{
+ const f=photo.files[0];
+ if(!f){alert('文書の写真を選択してください');return;}
+ status.textContent='AIが画像を読み取っています…';
+ result.textContent='';
+ const fd=new FormData(); fd.append('image',f);
+ try{
+   const r=await fetch('/api/ocr',{method:'POST',body:fd});
+   const data=await r.json();
+   if(!r.ok) throw new Error(data.error||'処理に失敗しました');
+   result.textContent=data.text;
+   status.textContent='完了しました。';
+ }catch(e){status.textContent='エラー'; result.textContent=e.message;}
+};
+
+document.getElementById('copy').onclick=async()=>{
+ await navigator.clipboard.writeText(result.textContent);
+ status.textContent='コピーしました。';
+};
+</script>
+</body>
+</html>
