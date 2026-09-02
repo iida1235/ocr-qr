@@ -5,7 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>文書文字起こし</title>
 
+<!-- OCR -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<!-- PDFを画像に変換 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs"
+        type="module"></script>
 
 <style>
 body{
@@ -13,50 +18,69 @@ body{
   max-width:680px;
   margin:0 auto;
   padding:24px;
-  background:#f6f6f6
+  background:#f6f6f6;
 }
+
 .card{
   background:white;
   border-radius:16px;
   padding:22px;
-  box-shadow:0 2px 12px #0001
+  box-shadow:0 2px 12px #0001;
 }
-h1{font-size:24px}
+
+h1{
+  font-size:24px;
+}
+
 input,button{
   font-size:18px;
   padding:14px;
   margin-top:10px;
   width:100%;
-  box-sizing:border-box
+  box-sizing:border-box;
 }
+
 button{
   cursor:pointer;
   border:0;
   border-radius:10px;
   background:#222;
-  color:white
+  color:white;
 }
+
 button:disabled{
   background:#999;
-  cursor:not-allowed
+  cursor:not-allowed;
 }
+
 #preview{
   max-width:100%;
   margin-top:15px;
-  border-radius:10px
+  border-radius:10px;
 }
+
 #result{
   white-space:pre-wrap;
   background:#fafafa;
   padding:15px;
   border-radius:10px;
   margin-top:15px;
-  min-height:100px
+  min-height:100px;
+  overflow-wrap:break-word;
 }
+
 .small{
   font-size:13px;
   color:#666;
-  margin-top:10px
+  margin-top:10px;
+}
+
+.info{
+  background:#f0f0f0;
+  padding:12px;
+  border-radius:10px;
+  font-size:14px;
+  margin-top:15px;
 }
 </style>
 </head>
@@ -67,92 +91,153 @@ button:disabled{
 
 <h1>📄 文書文字起こし</h1>
 
-<p>スマホで文書を撮影し、日本語の文字を読み取ります。</p>
+<p>
+写真やPDFを選択して、日本語の文字を読み取ります。
+</p>
 
 <input
   id="photo"
   type="file"
-  accept="image/*"
+  accept="image/*,application/pdf"
   capture="environment"
 >
 
 <img id="preview" hidden>
 
-<button id="run">文字起こしする</button>
+<div class="info">
+📷 JPG・PNGなどの写真<br>
+📄 PDF（複数ページ対応）
+</div>
+
+<button id="run">
+文字起こしする
+</button>
 
 <div id="status" class="small"></div>
 
 <div id="result"></div>
 
-<button id="copy">結果をコピー</button>
+<button id="copy">
+結果をコピー
+</button>
 
 </div>
 
-<script>
+<script type="module">
 
-const photo = document.getElementById('photo');
-const preview = document.getElementById('preview');
-const result = document.getElementById('result');
-const status = document.getElementById('status');
-const runButton = document.getElementById('run');
-const copyButton = document.getElementById('copy');
+import * as pdfjsLib from
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs';
+
+
+const photo =
+document.getElementById('photo');
+
+const preview =
+document.getElementById('preview');
+
+const result =
+document.getElementById('result');
+
+const status =
+document.getElementById('status');
+
+const runButton =
+document.getElementById('run');
+
+const copyButton =
+document.getElementById('copy');
+
+
+/* ファイル選択 */
 
 photo.onchange = () => {
 
   const file = photo.files[0];
 
-  if (!file) return;
-
-  preview.src = URL.createObjectURL(file);
-  preview.hidden = false;
+  if(!file) return;
 
   result.textContent = '';
-  status.textContent = '写真を選択しました。';
+
+  if(file.type === 'application/pdf'){
+
+    preview.hidden = true;
+
+    status.textContent =
+      'PDFを選択しました。';
+
+  }else{
+
+    preview.src =
+      URL.createObjectURL(file);
+
+    preview.hidden = false;
+
+    status.textContent =
+      '写真を選択しました。';
+
+  }
 
 };
+
+
+/* OCR開始 */
 
 runButton.onclick = async () => {
 
   const file = photo.files[0];
 
-  if (!file) {
-    alert('文書の写真を選択してください。');
+  if(!file){
+
+    alert(
+      '写真またはPDFを選択してください。'
+    );
+
     return;
   }
 
+
   runButton.disabled = true;
+
   result.textContent = '';
 
-  try {
 
-    status.textContent =
-      'OCRエンジンを準備しています。初回は少し時間がかかります…';
+  try{
 
-    const worker = await Tesseract.createWorker('jpn');
+    /*
+     * PDFの場合
+     */
 
-    status.textContent =
-      'AIではなくブラウザ内OCRで文字を読み取っています…';
+    if(file.type === 'application/pdf'){
 
-    const { data } = await worker.recognize(file);
+      await processPDF(file);
 
-    await worker.terminate();
+    }
 
-    result.textContent = data.text;
+    /*
+     * 写真の場合
+     */
 
-    status.textContent =
-      '完了しました。';
+    else{
 
-  } catch (error) {
+      await processImage(file);
+
+    }
+
+  }catch(error){
 
     console.error(error);
 
-    status.textContent = 'エラーが発生しました。';
+    status.textContent =
+      'エラーが発生しました。';
 
     result.textContent =
       '文字起こしに失敗しました。\n\n' +
       error.message;
 
-  } finally {
+  }finally{
 
     runButton.disabled = false;
 
@@ -160,23 +245,184 @@ runButton.onclick = async () => {
 
 };
 
+
+/* 写真OCR */
+
+async function processImage(file){
+
+  status.textContent =
+    'OCRエンジンを準備しています…';
+
+  const worker =
+    await Tesseract.createWorker('jpn');
+
+
+  status.textContent =
+    '写真から日本語を読み取っています…';
+
+
+  const {data} =
+    await worker.recognize(file);
+
+
+  await worker.terminate();
+
+
+  result.textContent =
+    data.text;
+
+
+  status.textContent =
+    '完了しました。';
+
+}
+
+
+/* PDF処理 */
+
+async function processPDF(file){
+
+  status.textContent =
+    'PDFを読み込んでいます…';
+
+
+  const arrayBuffer =
+    await file.arrayBuffer();
+
+
+  const pdf =
+    await pdfjsLib.getDocument({
+      data:arrayBuffer
+    }).promise;
+
+
+  const totalPages =
+    pdf.numPages;
+
+
+  status.textContent =
+    `PDFは${totalPages}ページあります。OCRを開始します…`;
+
+
+  const worker =
+    await Tesseract.createWorker('jpn');
+
+
+  let allText = '';
+
+
+  for(let pageNumber = 1;
+      pageNumber <= totalPages;
+      pageNumber++){
+
+    status.textContent =
+      `OCR処理中：${pageNumber} / ${totalPages}ページ`;
+
+
+    const page =
+      await pdf.getPage(pageNumber);
+
+
+    /*
+     * PDFページを画像化
+     */
+
+    const scale = 2;
+
+    const viewport =
+      page.getViewport({
+        scale:scale
+      });
+
+
+    const canvas =
+      document.createElement('canvas');
+
+
+    const context =
+      canvas.getContext('2d');
+
+
+    canvas.width =
+      viewport.width;
+
+    canvas.height =
+      viewport.height;
+
+
+    await page.render({
+      canvasContext:context,
+      viewport:viewport
+    }).promise;
+
+
+    /*
+     * 日本語OCR
+     */
+
+    const {data} =
+      await worker.recognize(canvas);
+
+
+    allText +=
+      `\n\n===== ${pageNumber}ページ =====\n\n`;
+
+    allText +=
+      data.text;
+
+
+    /*
+     * メモリ解放
+     */
+
+    canvas.width = 1;
+    canvas.height = 1;
+
+  }
+
+
+  await worker.terminate();
+
+
+  result.textContent =
+    allText.trim();
+
+
+  status.textContent =
+    `完了しました。${totalPages}ページを処理しました。`;
+
+}
+
+
+/* コピー */
+
 copyButton.onclick = async () => {
 
-  if (!result.textContent) {
-    alert('コピーする文字がありません。');
+  if(!result.textContent){
+
+    alert(
+      'コピーする文字がありません。'
+    );
+
     return;
   }
 
-  try {
 
-    await navigator.clipboard.writeText(result.textContent);
+  try{
+
+    await navigator.clipboard.writeText(
+      result.textContent
+    );
+
 
     status.textContent =
       'コピーしました。';
 
-  } catch (error) {
+  }catch(error){
 
-    alert('コピーできませんでした。');
+    alert(
+      'コピーできませんでした。'
+    );
 
   }
 
